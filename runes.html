@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
+    <title>Diablo 2 Runes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.5.0/math.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 5px;
+            max-width: 250px;
+            margin: 0 auto;
+            margin-top: 30px;
+        }
+        .entry-box {
+            display: flex;
+            align-items: center;
+            color:lightgrey;
+        }
+        .entry-box input[type="number"] {
+            width: 40px;
+            height: 20px;
+            text-align: center;
+            margin-left: 10px;
+            background-color: rgb(54, 54, 54);
+            color: lightgrey;
+        }
+        .label {
+            width: 50px;
+            text-align: right;
+        }
+        body {
+            background-color: rgb(32, 32, 32);
+        }
+        h1 {
+            color:lightgrey;
+        }
+        p {
+            color:lightgrey;
+        }
+        button {
+            color: lightgrey;
+            background-color: rgb(54, 54, 54)
+        }
+        table {
+            color: lightgrey;
+            border-collapse: collapse;
+            width: 400px;
+            margin-left: 100px;
+        }
+        th, td {
+            padding: 4px;
+        }
+        td:nth-child(1) {
+            text-align: left;
+            font-weight: bold;
+        }
+        td:not(:nth-child(1)) {
+            text-align: center;
+        }
+        tr:first-child {
+            border-bottom: 2px solid rgb(61, 211, 56);
+        }
+    </style>
+    <script> 
+            // Some plot constants, maybe make them variable or user-defined later
+            const xmin = -9;
+            const nSteps = 200;
+
+            // n = [15, 275]
+            // mu: a*x^b + c, [-17.1191, -0.1968, 4.3524]            
+            function mu_fit(n) {
+                const c = [-17.1191, -0.1968, 4.3524];
+                return c[0]*n**c[1] + c[2];
+            }
+
+            // sigma: centered and scaled as x_scaled = (x - 155)/84.58
+            //  5th order polynomial: p1*x^5 + p2*x^4 + ... p5*x + p6 where
+            //  [p1 p2 p3 p4 p5 p6] = [0.0135 -0.0251 -0.0184 0.0865 -0.2458 1.0950]
+            function sigma_fit(n) {
+                const x = (n - 155)/84.58;
+                const c = [1.0950, -0.2458, 0.0865, -0.0184, -0.0251, 0.0135];
+                let sum = 0;
+                for(let i = 0; i < c.length; i++) {
+                    sum += c[i]*x**i;
+                }
+                return sum
+            }
+
+            // k: centered and scaled as x_scaled = (x - 155)/84.58
+            //  5th order polynomial: p1*x^5 + p2*x^4 + ... p5*x + p6 where
+            //  [p1 p2 p3 p4 p5 p6] = [-0.0023 0.0201 -0.0400 0.0202 0.0022 -0.4552]
+            function k_fit(n) {
+                const x = (n - 155)/84.58;
+                const c = [-0.4552, 0.0022,  0.0202, -0.0400, 0.0201, -0.0023];
+                let sum = 0;
+                for(let i = 0; i < c.length; i++) {
+                    sum += c[i]*x**i;
+                }
+                return sum
+            }
+
+            // Rune names
+            const runes = [
+                    "El", "Eld", "Tir", "Nef", "Eth", "Ith", "Tal", "Ral", "Ort", "Thul", 
+                    "Amn", "Sol", "Shael", "Dol", "Hel", "Io", "Lum", "Ko", "Fal", "Lem", 
+                    "Pul", "Um", "Mal", "Ist", "Gul", "Vex", "Ohm", "Lo", "Sur", "Ber", 
+                    "Jah", "Cham", "Zod"
+                ];
+
+            // Rune probabilities
+            const p_i = [0.02844723, 0.01538462, 0.05882353, 0.03846154, 0.08333333, 0.05263158, 0.11111111, 
+            0.07692308, 0.11111111, 0.07692308, 0.09090909, 0.05882353, 0.05263158, 0.03571429, 0.02941176, 
+            0.01960784, 0.01562500, 0.01041667, 0.00813008, 0.00540541, 0.00408163, 0.00272480, 0.00279330, 
+            0.00185874, 0.00196464, 0.00130890, 0.00137552, 0.00091659, 0.00101729, 0.00067797, 0.00075700, 
+            0.00050480, 0.00019339
+            ]; 
+
+            // Rune values, as fraction of zod
+            const v_i = [7.00188474e-14, 2.10056542e-13, 6.30169627e-13, 1.89050888e-12, 5.67152664e-12, 
+            1.70145799e-11, 5.10437398e-11, 1.53131219e-10, 4.59393658e-10, 1.37818097e-09, 4.13454292e-09, 
+            1.24036288e-08, 3.72108863e-08, 1.11632659e-07, 3.34897977e-07, 1.00469393e-06, 3.01408179e-06, 
+            9.04224537e-06, 2.71267361e-05, 8.13802083e-05, 2.44140625e-04, 4.88281250e-04, 9.76562500e-04, 
+            1.95312500e-03, 3.90625000e-03, 7.81250000e-03, 1.56250000e-02, 3.12500000e-02, 6.25000000e-02, 
+            1.25000000e-01, 2.50000000e-01, 5.00000000e-01, 1.00000000e+00
+            ];
+
+            // Function: GEV t(x)
+            function gev_t(x, mu, sigma, k) {
+                // All k != 0 so use single form without checking for k == 0
+                const result = (1+k*(x-mu)/sigma)**(-1/k);
+                return result
+            }
+
+            // Function GEV CDF
+            function gev_cdf(mu, sigma, k, xmax) {
+                if (xmax === undefined) {
+                    xmax = mu - sigma/k;
+                }
+                const step = (xmax - xmin)/(nSteps - 1);
+                const x = new Array(nSteps).fill(0);
+                const y = new Array(nSteps).fill(0);
+                for (let i = 0; i < nSteps; i++) {
+                    x[i] = xmin + i*step;
+                    y[i] = Math.exp(-gev_t(x[i], mu, sigma, k));
+                }
+                return [x, y];
+            }
+
+            // Function GEV PDF single value
+            function gev_pdf_singleValue(mu, sigma, k, x) {
+                const tx = gev_t(x, mu, sigma, k);
+                return 1/sigma*tx**(k+1)*Math.exp(-tx);
+            }
+
+            // Function GEV PDF curve generator
+            function gev_pdf_curve(mu, sigma, k, xmax) {
+                if (xmax === undefined) {
+                    xmax = mu - sigma/k;
+                }
+                const step = (xmax - xmin)/(nSteps - 1);
+                const x = new Array(nSteps).fill(0);
+                const y = new Array(nSteps).fill(0);
+                for (let i = 0; i < nSteps; i++) {
+                    x[i] = xmin + i*step;
+                    const tx = gev_t(x[i], mu, sigma, k);
+                    y[i] = 1/sigma*tx**(k+1)*Math.exp(-tx);
+                }
+                return [x, y];
+            }
+
+            // Function GEV percentile (a cumulative distribution function evaluation)
+            function gev_percentile(mu, sigma, k, x) {
+                const tx = gev_t(x, mu, sigma, k);
+                const percentile = Math.exp(-tx);
+                return percentile*100
+            }
+            
+
+            // Function GEV E(X) (mean)
+            function gev_mean(mu, sigma, k) {
+                return mu + sigma*(math.gamma(1-k)-1)/k;
+            }
+
+            // Function: Multinomial random number generator
+            function multinomialRNG(n, probabilities) {
+                // Array to hold the result
+                const results = new Array(probabilities.length).fill(0);
+
+                // Loop for each trial
+                for (let i = 0; i < n; i++) {
+                    // Generate a random number between 0 and 1
+                    const randomValue = math.random();
+
+                    // Determine the outcome by comparing the random value with cumulative probabilities
+                    let cumulativeProbability = 0;
+                    for (let j = 0; j < probabilities.length; j++) {
+                        cumulativeProbability += probabilities[j];
+                        if (randomValue < cumulativeProbability) {
+                            results[j]++;
+                            break;
+                        }
+                    }
+                }
+                return results;
+            }
+
+            // Function to calculate Chi-Squared as chisqear = sum((observed - expected)^2 / expected)
+            function chisquareCalc() {
+                const n = sumRunes();
+                let sum = 0;
+                for (let i = 0; i < 33; i++) {
+                    const O_i = document.getElementById(`r${i}`).value;
+                    const E_i = n * p_i[i];
+                    sum += ((O_i - E_i)**2) / E_i;
+                }
+                return sum
+            }
+
+            // Function to generate 100 random runes
+            function generateRandomRunes() {
+                const n = 100; // Total number of trials
+                const results = multinomialRNG(n, p_i);
+
+                // Assign results to inputs r0 to r32
+                for (let i = 0; i < results.length; i++) {
+                    document.getElementById(`r${i}`).value = results[i];
+                }
+
+                // Update the count
+                sumRunes(); // update count
+                runeValue(); 
+                updateChart();
+                userLogRuneValueDisp();
+                runeMessage();
+                userEquivRuneDisp();
+                expectedValueDisp();
+            }
+
+            // Function to count all runes
+            function sumRunes() {
+                let sum = 0;
+                for (let i = 0; i <= 32; i++) {
+                    const value = document.getElementById(`r${i}`).value;
+                    sum += parseFloat(value) || 0; // Parse the value as a float, default to 0 if empty
+                }
+                document.getElementById("nRunes").textContent = sum;
+                return sum
+            }
+
+            // Function to calculate total rune value
+            function runeValue() {
+                let value = 0;
+                for (let i = 0; i < 33; i++) {
+                    value += document.getElementById(`r${i}`).value * v_i[i];
+                }
+                document.getElementById("userRuneValueDisp").textContent = value.toFixed(6);
+                return value
+            }
+
+            // Function for log10 rune value display
+            function userLogRuneValueDisp() {
+                const value = Math.log10(runeValue());
+                document.getElementById("userLogRuneValueDisp").textContent = value.toFixed(2);
+            }
+
+            // Function to display rune messages
+            function runeMessage() {
+                const n = sumRunes();
+                var msg
+                if (n < 15) {
+                    msg = "WARNING: Minimum 15 runes required!";
+                } else if (n > 275) {
+                    msg = "WARNING: Maximum 275 runes exceeded!";
+                } else {
+                    msg = "";
+                }
+                document.getElementById("runeMessage").textContent = msg;
+            }
+            
+            // Function to reset runes to zero
+            function resetRunes() {
+                for (let i = 0; i <= 32; i++) {
+                    document.getElementById(`r${i}`).value = 0; // Reset runes to zero
+                }
+                sumRunes(); // update count
+                runeValue();
+                runeMessage();
+                userLogRuneValueDisp();
+                userEquivRuneDisp();
+                expectedValueDisp();
+            }
+
+            // Function to find nearest two runes
+            function runeRange(lookup) {
+                const aboveIndex = v_i.findIndex(value => value > lookup);
+                var msg;
+                if (aboveIndex > 0) {
+                    const aboveRune = runes[aboveIndex];
+                    const belowRune = runes[aboveIndex - 1];
+                    msg = `${belowRune} - ${aboveRune}`;
+                } else {
+                    msg = "Zod+";
+                }
+                return msg
+            }
+            
+            // Function to print user's equivalent rune value
+            function userEquivRuneDisp() {
+                const userRuneValue = runeValue();
+                const msg = runeRange(userRuneValue);
+                document.getElementById("userEquivRuneDisp").textContent = msg;
+            }
+
+            // Function to print expected values
+            function expectedValueDisp() {
+
+                const n = sumRunes();
+                const xUser = Math.log10(runeValue());
+                const mu = mu_fit(n);
+                const sigma = sigma_fit(n);
+                const k = k_fit(n);
+
+                const xmean = gev_mean(mu, sigma, k);
+                const runeMean = 10**xmean;
+                const percentile = gev_percentile(mu, sigma, k, xUser);
+                const chisquareVal = chisquareCalc();
+
+                document.getElementById("expectedRuneValueDisp").textContent = runeMean.toFixed(6);
+                document.getElementById("expectedLogRuneValueDisp").textContent = xmean.toFixed(2);
+                document.getElementById("expectedEquivRuneDisp").textContent = runeRange(runeMean);
+                document.getElementById("userPercentileDisp").textContent = percentile.toFixed(0) + '%';
+                document.getElementById("userChiSquaredDisp").textContent = chisquareVal.toFixed(0);
+            }
+
+            // Function to add listener to all appropriate inputs
+            window.onload = function() {
+                generateRandomRunes();
+                sumRunes();
+                runeValue();
+                updateChart();
+                userLogRuneValueDisp();
+                runeMessage();
+                userEquivRuneDisp();
+                expectedValueDisp();
+                for (let i = 0; i <= 32; i++) {
+                    document.getElementById(`r${i}`).addEventListener('input', function() {
+                        sumRunes();
+                        runeValue();
+                        userLogRuneValueDisp();
+                        updateChart();
+                        runeMessage();
+                        userEquivRuneDisp();
+                        expectedValueDisp();
+                    });
+                };
+            }
+    </script>
+</head>
+<body>
+    <div style="display: flex; width:970px">
+        <div class="container" style="width: 250px; margin-right:20px;">
+            <!-- Generate 33 entry boxes for the runes -->
+            <script>
+
+                // runes went here
+                // Render the runes in two columns
+                for (let i = 0; i < 17; i++) {
+                    for (let j = 0; j < 2; j++) {
+                        const index = i + j * 17;
+                        if (runes[index]) {
+                            document.write(`
+                                <div class="entry-box">
+                                    <span class="label">${runes[index]}</span>
+                                    <input type="number" id="r${index}" value="0" min="0" tabindex="${index+1}">
+                                </div>
+                            `);
+                        }
+                    }
+                }
+            </script>
+            
+        </div>
+        <!--<div style="flex-grow: 1;">-->
+        <div style="width: 700px;">
+            <h1>Rune Statistics</h1>
+            <!-- Button to reset rune counts -->
+            <button type="button" onclick="resetRunes()" id="buttonResetRunes">Reset Runes</button>
+
+            <!-- Button to generate 100 random runes -->
+            <button type="button" onclick="generateRandomRunes()" id="buttonGenerateRunes">Generate 100 runes</button> <span id="runeMessage" style="color:rgb(221, 16, 16); font-weight:bold;"></span>
+
+            <table>
+                <tr>
+                    <td></td>
+                    <td><b>Your<br>Runes</b></td>
+                    <td><b>Expected<br>Values</b></td>
+                </tr>
+                <tr>
+                    <td>Rune count</td>
+                    <td><span id="nRunes"></span></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>Total Value (Zod equiv)</td>
+                    <td><span id="userRuneValueDisp"></span></td>
+                    <td><span id="expectedRuneValueDisp"></span></td>
+                </tr>
+                <tr>
+                    <td>Total Value (log10 Zod)</td>
+                    <td><span id="userLogRuneValueDisp"></span></td>
+                    <td><span id="expectedLogRuneValueDisp"></span></td>
+                </tr>
+                <tr>
+                    <td>Equivalent Rune Range</td>
+                    <td><span id="userEquivRuneDisp"></span></td>
+                    <td><span id="expectedEquivRuneDisp"></span></td>
+                </tr>
+                <tr>
+                    <td>Percentile</td>
+                    <td><span id="userPercentileDisp"></span></td>
+                    <td>50%</td>
+                </tr>
+                <tr>
+                    <td>Chi-squared</td>
+                    <td><span id="userChiSquaredDisp"></span></td>
+                    <td>32</td>
+                </tr>
+            </table>
+            
+            <br>
+
+            <canvas id="chart_cdf" width="400" height="200"></canvas>
+
+            <script>
+                /** Display order:
+                     * x0: Actual Rune Value, as a filled point
+                     * x1: Distribution mean, as a hollow point
+                     * x2: GEV PDF, as a curve
+                     * x3: Shade under curve up to actual rune value 
+                **/
+                const x0 = [];
+                const x1 = [];
+                const x2 = [];
+                const x3 = [];
+                const y0 = [];
+                const y1 = [];
+                const y2 = [];
+                const y3 = [];
+
+                const ctx = document.getElementById('chart_cdf').getContext('2d');
+                const chart_cdf = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: [
+                            {
+                                label: 'Your Rune Value',
+                                data: x0.map((val, index) => ({ x: val, y: y0[index]})),
+                                pointRadius: 6,
+                                backgroundColor: 'LimeGreen',
+                                borderColor: 'LimeGreen',
+                                borderWidth: 2, 
+                            },
+                            {
+                                label: 'Expected Rune Value',
+                                data: x1.map((val, index) => ({ x: val, y: y1[index]})),
+                                pointRadius: 6,
+                                backgroundColor: 'rgba(32, 32, 32, 1)',
+                                borderColor: 'LimeGreen',
+                                borderWidth: 2, 
+                            },
+                            {
+                                label: 'GEV PDF',
+                                data: x2.map((val, index) => ({ x: val, y: y2[index] })),
+                                pointRadius: 0, 
+                                borderColor: 'LimeGreen',
+                                borderWidth: 2, 
+                            },
+                            {
+                                label: 'shaded region',
+                                data: x3.map((val, index) => ({ x: val, y: y3[index] })),
+                                pointRadius: 0,
+                                fill: 'origin',
+                                borderColor: 'rgba(0, 0, 0, 0)',
+                                backgroundColor: 'rgba(54, 54, 54, 0.5)'
+                            },
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                min: -9,
+                                max: 1,
+                                title: {
+                                    display: true,
+                                    text: 'log_10 Total Rune Value'
+                                },
+                                grid: {
+                                    color: 'rgb(54, 54, 54)'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Probability Density'
+                                },
+                                grid: {
+                                    color: 'rgb(54, 54, 54)'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'right',
+                                labels: {
+                                    filter: function(item, chart) {
+                                        // Only show the two points in the legend, which are the first two entries
+                                        return item.datasetIndex < 2;
+                                    },
+                                    usePointStyle: true,
+                                    pointStyle: 'circle',
+                                    color: 'LightGray',
+                                }
+                            }
+                        }
+                    }
+                });
+
+                function updateChart() {
+                    const n = sumRunes();
+                    const mu = mu_fit(n);
+                    const sigma = sigma_fit(n);
+                    const k = k_fit(n);
+
+                    /** Display order:
+                     * x0: Actual Rune Value, as a point
+                     * x1: Distribution mean, as a point
+                     * x2: GEV PDF, as a curve
+                     * x3: Shading up to actual rune value 
+                    **/
+
+                    const x0 = [math.log10(runeValue())];
+                    const y0 = [gev_pdf_singleValue(mu, sigma, k, x0[0])];
+                    const x1 = [gev_mean(mu, sigma, k)];
+                    const y1 = [gev_pdf_singleValue(mu, sigma, k, x1[0])];
+                    const [x2, y2] = gev_pdf_curve(mu, sigma, k);
+                    const [x3, y3] = gev_pdf_curve(mu, sigma, k, x0[0]); 
+
+                    chart_cdf.data.datasets[0].data = x0.map((val, index) => ({ x: val, y: y0[index] }));
+                    chart_cdf.data.datasets[1].data = x1.map((val, index) => ({ x: val, y: y1[index] }));
+                    chart_cdf.data.datasets[2].data = x2.map((val, index) => ({ x: val, y: y2[index] }));
+                    chart_cdf.data.datasets[3].data = x3.map((val, index) => ({ x: val, y: y3[index] }));
+
+                    chart_cdf.update();
+                }
+
+                updateChart();
+            </script>
+        </div>
+    </div>
+    
+</body>
+</html>
